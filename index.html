@@ -14,43 +14,56 @@
                 <svg class="w-9 h-9 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
                 <h1 class="text-3xl font-extrabold text-gray-900 tracking-tight">E-Belajar <span class="text-teal-600">Kedokteran</span></h1>
             </div>
-            <span class="text-sm font-semibold text-teal-700 bg-teal-50 px-3 py-1 rounded-full">Drive Otomatis</span>
+            <button id="btn-kembali" onclick="kembaliKeFolderSebelumnya()" class="hidden flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold px-4 py-2 rounded-xl transition text-sm">
+                ← Kembali
+            </button>
         </nav>
     </header>
 
     <main class="max-w-7xl mx-auto p-6 md:p-8">
         
-        <div class="bg-white p-8 rounded-2xl shadow-lg border-t-4 border-teal-500 mb-8">
-            <h2 class="text-4xl font-bold text-gray-950 tracking-tight">Materi Drive Saya</h2>
-            <p class="text-gray-500 mt-2">Daftar di bawah ini akan terupdate otomatis setiap kali Anda menambah file/folder di Google Drive.</p>
+        <div class="bg-white p-6 rounded-2xl shadow-lg border-t-4 border-teal-500 mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+                <h2 id="nama-folder-aktif" class="text-3xl font-bold text-gray-950 tracking-tight">Materi Utama</h2>
+                <p class="text-gray-500 text-sm mt-1">Menampilkan file dan folder secara langsung di dalam website.</p>
+            </div>
         </div>
 
         <div id="grid-materi" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             <div class="col-span-full text-center py-12">
-                <p class="text-gray-500 animate-pulse font-medium">Sedang mengambil data terbaru dari Google Drive...</p>
+                <p class="text-gray-500 animate-pulse font-medium">Memuat materi...</p>
             </div>
         </div>
     </main>
 
     <script>
-        // === GANTI KEDUA VARIABEL INI ===
+        // === MASUKKAN API KEY ANDA ===
         const API_KEY = 'AIzaSyCrzY5htjG_Q5NE5RIbtvp4ObHU5L3PWZo'; 
-        const FOLDER_ID = '1tdmUCgVhsvp4ADXL1mjPv5qx_cidoIbL'; 
+        const ROOT_FOLDER_ID = '1tdmUCgVhsvp4ADXL1mjPv5qx_cidoIbL'; 
 
-        async function ambilDataDrive() {
-            // URL API untuk meminta daftar file di dalam folder utama
-            const url = `https://www.googleapis.com/drive/v3/files?q='${FOLDER_ID}'+in+parents+and+trashed=false&key=${API_KEY}&fields=files(id,name,mimeType)&orderBy=name`;
+        // Array untuk mencatat riwayat folder yang sedang dibuka (untuk fitur kembali)
+        let riwayatFolder = [
+            { id: ROOT_FOLDER_ID, name: 'Materi Utama' }
+        ];
+
+        // Fungsi utama untuk mengambil data berdasarkan ID Folder
+        async function ambilDataDrive(folderId) {
+            const container = document.getElementById('grid-materi');
+            container.innerHTML = `<div class="col-span-full text-center py-12"><p class="text-gray-500 animate-pulse font-medium">Membuka folder...</p></div>`;
+
+            const url = `https://www.googleapis.com/drive/v3/files?q='${folderId}'+in+parents+and+trashed=false&key=${API_KEY}&fields=files(id,name,mimeType)&orderBy=name`;
             
             try {
                 const response = await fetch(url);
                 const data = await response.json();
                 
                 if (data.error) {
-                    document.getElementById('grid-materi').innerHTML = `<p class="text-red-500 col-span-full text-center">Error: ${data.error.message}. Pastikan folder Drive sudah di-share ke 'Anyone with link'</p>`;
+                    container.innerHTML = `<p class="text-red-500 col-span-full text-center">Error: ${data.error.message}</p>`;
                     return;
                 }
 
                 tampilkanKeWeb(data.files);
+                updateTombolKembali();
             } catch (error) {
                 console.error("Gagal mengambil data:", error);
             }
@@ -58,10 +71,10 @@
 
         function tampilkanKeWeb(files) {
             const container = document.getElementById('grid-materi');
-            container.innerHTML = ''; // Hapus tulisan loading
+            container.innerHTML = ''; 
 
             if (!files || files.length === 0) {
-                container.innerHTML = '<p class="text-gray-500 col-span-full text-center">Folder kosong.</p>';
+                container.innerHTML = '<p class="text-gray-500 col-span-full text-center py-12">Folder ini kosong.</p>';
                 return;
             }
 
@@ -69,28 +82,29 @@
                 let ikon = '';
                 let warnaIkon = '';
                 let badgeText = 'File';
+                let aksiKlik = '';
 
-                // Deteksi tipe file/folder untuk menentukan ikon & warna bertema medis
+                // Cek apakah item berupa folder atau file biasa
                 if (file.mimeType === 'application/vnd.google-apps.folder') {
                     ikon = `<svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg>`;
                     warnaIkon = 'bg-teal-50 text-teal-600';
                     badgeText = 'Folder';
-                } else if (file.mimeType.includes('video')) {
-                    ikon = `<svg class="w-7 h-7" fill="currentColor" viewBox="0 0 20 20"><path d="M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14.553 7.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z"></path></svg>`;
-                    warnaIkon = 'bg-red-50 text-red-600';
-                    badgeText = 'Video';
+                    // JIKA FOLDER: Saat diklik jalankan fungsi masukFolder(), BUKAN buka link baru
+                    aksiKlik = `onclick="masukFolder('${file.id}', '${file.name.replace(/'/g, "\\'")}')" href="#"`;
                 } else {
-                    ikon = `<svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>`;
-                    warnaIkon = 'bg-blue-50 text-blue-600';
-                    badgeText = 'Dokumen';
+                    if (file.mimeType.includes('video')) {
+                        ikon = `<svg class="w-7 h-7" fill="currentColor" viewBox="0 0 20 20"><path d="M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14.553 7.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z"></path></svg>`;
+                        warnaIkon = 'bg-red-50 text-red-600';
+                        badgeText = 'Video';
+                    } else {
+                        ikon = `<svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>`;
+                        warnaIkon = 'bg-blue-50 text-blue-600';
+                        badgeText = 'Dokumen';
+                    }
+                    // JIKA FILE: Tetap buka di tab baru Google Drive untuk view/streaming
+                    aksiKlik = `href="https://drive.google.com/file/d/${file.id}/view" target="_blank"`;
                 }
 
-                // Link akses langsung ke Google Drive
-                const linkAkses = file.mimeType === 'application/vnd.google-apps.folder' 
-                    ? `https://drive.google.com/drive/folders/${file.id}`
-                    : `https://drive.google.com/file/d/${file.id}/view`;
-
-                // Render kartu HTML
                 const kartuHtml = `
                     <div class="bg-white rounded-2xl shadow-md hover:shadow-xl transition duration-300 p-6 flex flex-col justify-between group">
                         <div>
@@ -104,15 +118,44 @@
                                 </div>
                             </div>
                         </div>
-                        <a href="${linkAkses}" target="_blank" class="mt-6 inline-block w-full text-center bg-teal-500 hover:bg-teal-600 text-white font-semibold py-2.5 rounded-xl transition duration-150 text-sm">Buka Materi</a>
+                        <a ${aksiKlik} class="mt-6 inline-block w-full text-center bg-teal-500 hover:bg-teal-600 text-white font-semibold py-2.5 rounded-xl transition duration-150 text-sm cursor-pointer">
+                            ${file.mimeType === 'application/vnd.google-apps.folder' ? 'Buka Folder' : 'Lihat File'}
+                        </a>
                     </div>
                 `;
                 container.innerHTML += kartuHtml;
             });
         }
 
-        // Jalankan fungsi
-        ambilDataDrive();
+        // Fungsi saat user mengklik folder
+        function masukFolder(id, nama) {
+            riwayatFolder.push({ id: id, name: nama });
+            document.getElementById('nama-folder-aktif').innerText = nama;
+            ambilDataDrive(id);
+        }
+
+        // Fungsi saat user mengklik tombol Kembali
+        function kembaliKeFolderSebelumnya() {
+            if (riwayatFolder.length > 1) {
+                riwayatFolder.pop(); // Hapus folder aktif saat ini dari riwayat
+                const folderTujuan = riwayatFolder[riwayatFolder.length - 1]; // Ambil folder sebelumnya
+                document.getElementById('nama-folder-aktif').innerText = folderTujuan.name;
+                ambilDataDrive(folderTujuan.id);
+            }
+        }
+
+        // Fungsi untuk memunculkan/menyembunyikan tombol Kembali di header
+        function updateTombolKembali() {
+            const btnKembali = document.getElementById('btn-kembali');
+            if (riwayatFolder.length > 1) {
+                btnKembali.classList.remove('hidden');
+            } else {
+                btnKembali.classList.add('hidden');
+            }
+        }
+
+        // Jalankan pertama kali saat web dibuka
+        ambilDataDrive(ROOT_FOLDER_ID);
     </script>
 </body>
 </html>
